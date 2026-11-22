@@ -12,21 +12,28 @@
   writableTmpDirAsHomeHook,
   versionCheckHook,
   nix-update-script,
+  # The `engine` cargo feature (default upstream) links the BUSL-1.1
+  # `rtk-engine` crate: pipelines, the PostToolUse compressor, and model
+  # routing. `withEngine = false` builds the Apache-2.0 edition upstream
+  # ships as rtk-oss: command rewriting and the built-in output filters only.
+  withEngine ? true,
 }:
 
 rustPlatform.buildRustPackage (finalAttrs: {
   pname = "rtk";
-  version = "1.1.0";
+  version = "1.2.1";
   __structuredAttrs = true;
 
   src = fetchFromGitHub {
     owner = "rtk-ai";
     repo = "rtk";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-RlMGWDGSvKvbRjZ/duJNdVrnqY7B4dM/5IWVJ5LUzjg=";
+    hash = "sha256-sfx7rfoiXgnaqW0Gq5fiQqKY2NsSO7rwmxWxqTgkzbQ=";
   };
 
-  cargoHash = "sha256-rPkrAUgeEktzpNBPAw3xVJS7QSUS0lKGsBDWv3MlE8I=";
+  cargoHash = "sha256-X1TkZyG/aYEhUeQmpxEG/rXi1iUCFkxSNc7iD1ZGCy8=";
+
+  buildNoDefaultFeatures = !withEngine;
 
   postPatch = ''
     substituteInPlace tests/run_shell_test.rs \
@@ -66,6 +73,10 @@ rustPlatform.buildRustPackage (finalAttrs: {
     # Waits on a shim subprocess that never gets scheduled inside the build sandbox, so it only ever
     # fails on its own 60s timeout.
     "--skip=signalled_run_still_prints_captured_output"
+    # Truncates only when the shared recall store accepts a write; under parallel
+    # tests the store can be Unavailable and filter_curl_output fails open to
+    # passthrough, so the "bytes total" assertion depends on test scheduling.
+    "--skip=cmds::cloud::curl_cmd::tests::test_filter_curl_multibyte_boundary"
   ];
 
   __darwinAllowLocalNetworking = true;
@@ -87,9 +98,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
     description = "CLI proxy that reduces LLM token consumption by 60-90% on common dev commands";
     homepage = "https://github.com/rtk-ai/rtk";
     changelog = "https://github.com/rtk-ai/rtk/blob/${finalAttrs.src.tag}/CHANGELOG.md";
-    license = with lib.licenses; [
-      asl20
-    ];
+    license = with lib.licenses; [ asl20 ] ++ lib.optional withEngine bsl11;
     maintainers = with lib.maintainers; [ GaetanLepage ];
     mainProgram = "rtk";
   };
